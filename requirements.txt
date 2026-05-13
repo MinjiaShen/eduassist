@@ -1,0 +1,14 @@
+# requirements.txt — EduAssist
+
+flask>=3.0
+flask-cors>=4.0
+openai-whisper
+paddlepaddle
+paddleocr
+anthropic              # Claude Vision API（可选）
+pillow-heif            # HEIC 格式支持（可选）
+pyyaml
+python-docx            # DOCX 输出支持
+jinja2                 # 模板渲染
+python-dotenv          # 读取 .env 配置
+markdown               # Markdown 转 HTML 预览

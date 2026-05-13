@@ -1,0 +1,135 @@
+# 中医医案自定义标记配置
+# 依据：优秀中医临床人才研修项目医案撰写要求
+# 修改此文件后，Web 界面中点击"重载配置"即可生效
+
+# ── 第一部分：病人一般情况和诊疗过程 ─────────────────
+
+markers:
+  - symbol: "【患者】"
+    field: patient_info
+    type: section_header
+    description: 患者一般情况（姓名、性别、年龄、婚姻、职业、居处环境）
+
+  - symbol: "【主诉】"
+    field: chief_complaint
+    type: section_header
+    description: 主诉（主要症状及持续时间）
+
+  - symbol: "【现病史】"
+    field: present_illness
+    type: section_header
+    description: 现病史（发病时令、病情演变、诊疗经过）
+
+  - symbol: "【既往史】"
+    field: past_history
+    type: section_header
+    description: 既往病史
+
+  - symbol: "【舌象】"
+    field: tongue_diagnosis
+    type: section_header
+    description: 舌诊描述
+
+  - symbol: "【脉象】"
+    field: pulse_diagnosis
+    type: section_header
+    description: 脉诊描述
+
+  - symbol: "【诊断】"
+    field: diagnosis
+    type: section_header
+    description: 中医诊断（病名+证型）
+
+  - symbol: "【西医诊断】"
+    field: western_diagnosis
+    type: section_header
+    description: 西医诊断病名
+
+  - symbol: "【理化检查】"
+    field: lab_results
+    type: section_header
+    description: 实验室检查及理化检查结果
+
+  # ── 第二部分：辨证分析与立法 ─────────────────────
+
+  - symbol: "【辨证】"
+    field: syndrome_analysis
+    type: section_header
+    description: 辨证分析（辨证思路、证候分析）
+
+  - symbol: "【治则】"
+    field: treatment_principle
+    type: section_header
+    description: 治疗原则（治法）
+
+  - symbol: "【方剂】"
+    field: base_formula
+    type: section_header
+    description: 方剂名称（基本方或自拟方）
+
+  # ── 第三部分：处方 ─────────────────────────────
+
+  - symbol: "【处方】"
+    field: prescription
+    type: section_header
+    description: 内服处方（药名、剂量、剂数、服法）
+
+  - symbol: "【外用药】"
+    field: external_prescription
+    type: section_header
+    description: 外用药处方
+
+  # ── 第四部分：医嘱 ─────────────────────────────
+
+  - symbol: "【医嘱】"
+    field: doctor_advice
+    type: section_header
+    description: 医嘱（服药注意事项、饮食宜忌、起居调摄）
+
+  # ── 第五部分：体会 ─────────────────────────────
+
+  - symbol: "【体会】"
+    field: experience
+    type: section_header
+    description: 临证体会（思辨特点、用药心得、总结感悟）
+
+  # ── 复诊记录 ──────────────────────────────────
+
+  - symbol: "【二诊】"
+    field: followup_visit_2
+    type: section_header
+    description: 二诊记录（病情变化、辨证调整、处方变化）
+
+  - symbol: "【三诊】"
+    field: followup_visit_3
+    type: section_header
+    description: 三诊记录
+
+  - symbol: "【四诊】"
+    field: followup_visit_4
+    type: section_header
+    description: 四诊记录
+
+  - symbol: "【五诊】"
+    field: followup_visit_5
+    type: section_header
+    description: 五诊记录
+
+  # ── 行内标记 ──────────────────────────────────
+
+  - symbol: "△"
+    field: acupoint
+    type: inline_tag
+    description: 穴位标记，如 △足三里
+
+  - symbol: "★"
+    field: key_symptom
+    type: highlight
+    description: 重点症状
+
+  - symbol: "→"
+    field: treatment_direction
+    type: inline_tag
+    description: 治则指向，如 阳虚 → 温阳补肾
+
+output_template: templates/case_template.md

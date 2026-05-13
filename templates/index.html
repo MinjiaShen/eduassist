@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduAssist — 医案辅助工具</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- ═══ 顶部导航 ═══ -->
+    <header class="app-header">
+        <div class="header-inner">
+            <h1 class="logo">
+                <span class="logo-icon">🩺</span> EduAssist
+            </h1>
+            <span class="header-sub">医案辅助记录工具</span>
+        </div>
+    </header>
+
+    <!-- ═══ 标签页导航 ═══ -->
+    <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-audio">
+            <span class="tab-icon">🎙️</span> 音频转录
+        </button>
+        <button class="tab-btn" data-tab="tab-photo">
+            <span class="tab-icon">📷</span> 照片识别
+        </button>
+        <button class="tab-btn" data-tab="tab-markers">
+            <span class="tab-icon">⚙️</span> 标记配置
+        </button>
+    </nav>
+
+    <main class="main-content">
+
+        <!-- ═══════════════════════════════════════════════
+             Tab 1 — 音频转录
+             ═══════════════════════════════════════════════ -->
+        <section id="tab-audio" class="tab-panel active">
+            <div class="panel-card">
+                <h2 class="section-title">音频转录</h2>
+                <p class="section-desc">上传诊室录音，自动转录为文字。</p>
+
+                <!-- 拖拽上传区 -->
+                <div class="dropzone" id="audio-dropzone">
+                    <input type="file" id="audio-file" accept=".m4a,.mp3,.wav,.aac,.flac,.ogg" hidden>
+                    <div class="dropzone-inner">
+                        <span class="dropzone-icon">🎵</span>
+                        <p>拖拽音频文件到此处，或 <label for="audio-file" class="link">点击选择</label></p>
+                        <p class="dropzone-hint">支持 m4a / mp3 / wav / aac / flac / ogg</p>
+                    </div>
+                    <div class="file-info" id="audio-file-info" hidden>
+                        <span class="file-name" id="audio-file-name"></span>
+                        <button class="btn-icon btn-remove" id="audio-remove" title="移除">✕</button>
+                    </div>
+                </div>
+
+                <!-- 选项 -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="model-size">模型大小</label>
+                        <select id="model-size">
+                            <option value="small">small（快速）</option>
+                            <option value="medium" selected>medium（平衡）</option>
+                            <option value="large-v3">large-v3（精准）</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="language">语言</label>
+                        <select id="language">
+                            <option value="">自动检测</option>
+                            <option value="zh">中文（普通话）</option>
+                            <option value="yue">粤语</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="btn-transcribe">开始转录</button>
+
+                <!-- 进度 -->
+                <div class="progress-bar" id="audio-progress" hidden>
+                    <div class="progress-track">
+                        <div class="progress-fill indeterminate"></div>
+                    </div>
+                    <span class="progress-text">正在转录，请稍候…</span>
+                </div>
+
+                <!-- 结果 -->
+                <div class="result-area" id="audio-result" hidden>
+                    <div class="result-header">
+                        <h3>转录结果</h3>
+                        <div class="result-actions">
+                            <button class="btn btn-small btn-outline" id="btn-audio-copy">复制</button>
+                            <button class="btn btn-small btn-outline" id="btn-audio-download">下载 TXT</button>
+                        </div>
+                    </div>
+                    <textarea id="audio-text" class="result-textarea" rows="12" placeholder="转录文本将显示在此处…"></textarea>
+                    <div class="result-meta" id="audio-meta"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════
+             Tab 2 — 照片识别
+             ═══════════════════════════════════════════════ -->
+        <section id="tab-photo" class="tab-panel">
+            <div class="panel-card">
+                <h2 class="section-title">照片识别</h2>
+                <p class="section-desc">拍照或上传处方/病历图片，自动识别文字内容。</p>
+
+                <!-- 多图上传区 -->
+                <div class="dropzone" id="photo-dropzone">
+                    <input type="file" id="photo-files" accept=".jpg,.jpeg,.png,.heic" multiple hidden>
+                    <div class="dropzone-inner">
+                        <span class="dropzone-icon">📷</span>
+                        <p>拖拽图片到此处，或 <label for="photo-files" class="link">点击选择</label></p>
+                        <p class="dropzone-hint">支持 jpg / png / heic · 可多选</p>
+                    </div>
+                    <div class="file-info" id="photo-file-info" hidden>
+                        <span class="file-name" id="photo-file-count"></span>
+                        <button class="btn-icon btn-remove" id="photo-remove" title="清空">✕</button>
+                    </div>
+                    <!-- 缩略图预览 -->
+                    <div class="thumb-grid" id="photo-thumbs"></div>
+                </div>
+
+                <!-- 选项 -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ocr-engine">识别引擎</label>
+                        <select id="ocr-engine">
+                            <option value="paddleocr">PaddleOCR（本地快速）</option>
+                            <option value="claude_vision">Claude Vision（高精度）</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto-parse" checked>
+                            自动标记解析
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="btn-recognize">开始识别</button>
+
+                <!-- 进度 -->
+                <div class="progress-bar" id="photo-progress" hidden>
+                    <div class="progress-track">
+                        <div class="progress-fill indeterminate"></div>
+                    </div>
+                    <span class="progress-text">正在识别…</span>
+                </div>
+
+                <!-- 原始文本预览 -->
+                <div class="result-area" id="photo-raw-result" hidden>
+                    <div class="result-header">
+                        <h3>识别原始文本</h3>
+                        <button class="btn btn-small btn-outline" id="btn-raw-copy">复制</button>
+                    </div>
+                    <textarea id="raw-text" class="result-textarea" rows="8" readonly></textarea>
+                </div>
+
+                <!-- 结构化医案预览 -->
+                <div class="result-area" id="photo-structured" hidden>
+                    <div class="result-header">
+                        <h3>结构化医案预览</h3>
+                        <div class="result-actions">
+                            <button class="btn btn-small btn-outline" id="btn-md-download">下载 MD</button>
+                            <button class="btn btn-small btn-outline" id="btn-docx-download">下载 DOCX</button>
+                        </div>
+                    </div>
+                    <div id="structured-preview" class="preview-box"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════
+             Tab 3 — 标记配置
+             ═══════════════════════════════════════════════ -->
+        <section id="tab-markers" class="tab-panel">
+            <div class="panel-card">
+                <h2 class="section-title">标记配置</h2>
+                <p class="section-desc">编辑医案自定义标记的 YAML 配置，保存后重载即可生效。</p>
+
+                <div class="editor-toolbar">
+                    <button class="btn btn-primary" id="btn-markers-save">保存配置</button>
+                    <button class="btn btn-outline" id="btn-markers-reload">重载配置</button>
+                    <span class="editor-status" id="markers-status"></span>
+                </div>
+
+                <textarea id="markers-editor" class="yaml-editor" rows="20" spellcheck="false"
+                    placeholder="加载中…"></textarea>
+
+                <!-- 标记测试区 -->
+                <div class="test-section">
+                    <h3>标记测试</h3>
+                    <p class="section-desc">输入文本，实时预览标记解析结果。</p>
+                    <textarea id="test-input" class="result-textarea" rows="6"
+                        placeholder="输入含标记的文本，如：【主诉】头痛三天…"></textarea>
+                    <button class="btn btn-outline" id="btn-test-parse">测试解析</button>
+                    <div id="test-result" class="preview-box" hidden></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ═══ 全局 Toast ═══ -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- ═══ JavaScript ═══ -->
+    <script>
+    (function() {
+        "use strict";
+
+        // ── 工具函数 ──────────────────────────────────────
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => document.querySelectorAll(sel);
+
+        function showToast(msg, type = "info", duration = 3000) {
+            const container = $("#toast-container");
+            const toast = document.createElement("div");
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add("show"));
+            setTimeout(() => {
+                toast.classList.remove("show");
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        async function api(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                const data = await res.json();
+                if (!data.success) {
+                    throw new Error(data.error || "请求失败");
+                }
+                return data;
+            } catch (e) {
+                showToast(e.message, "error");
+                throw e;
+            }
+        }
+
+        function setProgress(id, visible, text) {
+            const el = $(id);
+            el.hidden = !visible;
+            if (text) el.querySelector(".progress-text").textContent = text;
+        }
+
+        // ── 标签页切换 ────────────────────────────────────
+        $$(".tab-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                $$(".tab-btn").forEach(b => b.classList.remove("active"));
+                $$(".tab-panel").forEach(p => p.classList.remove("active"));
+                btn.classList.add("active");
+                $(`#${btn.dataset.tab}`).classList.add("active");
+            });
+        });
+
+        // ── 拖拽上传通用逻辑 ──────────────────────────────
+        function setupDropzone(dropzoneId, inputId, onFiles) {
+            const dz = $(dropzoneId);
+            const input = $(inputId);
+
+            ["dragenter", "dragover"].forEach(ev =>
+                dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("dragover"); })
+            );
+            ["dragleave", "drop"].forEach(ev =>
+                dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("dragover"); })
+            );
+            dz.addEventListener("drop", e => {
+                const files = e.dataTransfer.files;
+                if (files.length) {
+                    input.files = e.dataTransfer.files; // won't work in all browsers
+                    onFiles(files);
+                }
+            });
+            input.addEventListener("change", () => onFiles(input.files));
+        }
+
+        // ── Tab 1: 音频转录 ───────────────────────────────
+        let audioFile = null;
+
+        setupDropzone("#audio-dropzone", "#audio-file", files => {
+            audioFile = files[0];
+            $("#audio-file-name").textContent = audioFile.name;
+            $("#audio-file-info").hidden = false;
+        });
+
+        $("#audio-remove").addEventListener("click", () => {
+            audioFile = null;
+            $("#audio-file").value = "";
+            $("#audio-file-info").hidden = true;
+        });
+
+        $("#btn-transcribe").addEventListener("click", async () => {
+            if (!audioFile) return showToast("请先上传音频文件", "error");
+
+            const fd = new FormData();
+            fd.append("audio", audioFile);
+            fd.append("model_size", $("#model-size").value);
+            fd.append("language", $("#language").value);
+
+            setProgress("#audio-progress", true, "正在转录，请稍候…");
+            $("#audio-result").hidden = true;
+
+            try {
+                const data = await api("/api/transcribe", { method: "POST", body: fd });
+                $("#audio-text").value = data.text || "";
+                const meta = [];
+                if (data.language) meta.push(`语言: ${data.language}`);
+                if (data.duration) meta.push(`时长: ${data.duration.toFixed(1)}s`);
+                $("#audio-meta").textContent = meta.join(" · ");
+                $("#audio-result").hidden = false;
+                showToast("转录完成");
+            } catch (e) {
+                // already toasted
+            } finally {
+                setProgress("#audio-progress", false);
+            }
+        });
+
+        $("#btn-audio-copy").addEventListener("click", () => {
+            navigator.clipboard.writeText($("#audio-text").value);
+            showToast("已复制到剪贴板");
+        });
+
+        $("#btn-audio-download").addEventListener("click", async () => {
+            const text = $("#audio-text").value;
+            if (!text) return showToast("没有可下载的内容", "error");
+            try {
+                const data = await api("/api/export", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content: text, filename: "transcription", format: "txt" })
+                });
+                window.location.href = `/api/download/${data.filename}`;
+            } catch (e) {}
+        });
+
+        // ── Tab 2: 照片识别 ───────────────────────────────
+        let photoFiles = [];
+
+        setupDropzone("#photo-dropzone", "#photo-files", files => {
+            photoFiles = Array.from(files);
+            $("#photo-file-count").textContent = `已选 ${photoFiles.length} 张图片`;
+            $("#photo-file-info").hidden = false;
+            // 缩略图
+            const grid = $("#photo-thumbs");
+            grid.innerHTML = "";
+            photoFiles.forEach(f => {
+                const url = URL.createObjectURL(f);
+                grid.innerHTML += `<img src="${url}" class="thumb" alt="${f.name}">`;
+            });
+        });
+
+        $("#photo-remove").addEventListener("click", () => {
+            photoFiles = [];
+            $("#photo-files").value = "";
+            $("#photo-file-info").hidden = true;
+            $("#photo-thumbs").innerHTML = "";
+        });
+
+        $("#btn-recognize").addEventListener("click", async () => {
+            if (!photoFiles.length) return showToast("请先上传图片", "error");
+
+            const fd = new FormData();
+            photoFiles.forEach(f => fd.append("images", f));
+            fd.append("engine", $("#ocr-engine").value);
+
+            setProgress("#photo-progress", true);
+            $("#photo-raw-result").hidden = true;
+            $("#photo-structured").hidden = true;
+
+            try {
+                const data = await api("/api/batch_recognize", { method: "POST", body: fd });
+                const results = data.results || [];
+                const allText = results.map(r => r.raw_text || "").join("\n\n---\n\n");
+                $("#raw-text").value = allText;
+                $("#photo-raw-result").hidden = false;
+
+                // 如果开启了自动解析
+                if ($("#auto-parse").checked && allText.trim()) {
+                    const parsed = await api("/api/parse", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text: allText })
+                    });
+                    if (parsed.fields) {
+                        const gen = await api("/api/generate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ fields: parsed.fields })
+                        });
+                        $("#structured-preview").innerText = gen.markdown || "(空)";
+                        $("#photo-structured").hidden = false;
+                    }
+                }
+
+                showToast("识别完成");
+            } catch (e) {
+                // already toasted
+            } finally {
+                setProgress("#photo-progress", false);
+            }
+        });
+
+        $("#btn-raw-copy").addEventListener("click", () => {
+            navigator.clipboard.writeText($("#raw-text").value);
+            showToast("已复制");
+        });
+
+        async function downloadCase(fmt) {
+            const md = $("#structured-preview").innerText;
+            if (!md) return showToast("没有可下载的内容", "error");
+            try {
+                const data = await api("/api/export", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content: md, filename: "medical_case", format: fmt })
+                });
+                window.location.href = `/api/download/${data.filename}`;
+            } catch (e) {}
+        }
+
+        $("#btn-md-download").addEventListener("click", () => downloadCase("md"));
+        $("#btn-docx-download").addEventListener("click", () => downloadCase("docx"));
+
+        // ── Tab 3: 标记配置 ───────────────────────────────
+        // 加载当前配置
+        (async function loadMarkers() {
+            try {
+                const data = await api("/api/markers");
+                $("#markers-editor").value = data.content || "";
+            } catch (e) {
+                $("#markers-editor").value = "# 加载失败，请检查后端";
+            }
+        })();
+
+        $("#btn-markers-save").addEventListener("click", async () => {
+            try {
+                await api("/api/markers/save", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content: $("#markers-editor").value })
+                });
+                showToast("配置已保存");
+                $("#markers-status").textContent = "✓ 已保存";
+                setTimeout(() => $("#markers-status").textContent = "", 3000);
+            } catch (e) {}
+        });
+
+        $("#btn-markers-reload").addEventListener("click", async () => {
+            try {
+                await api("/api/markers/reload", { method: "POST" });
+                showToast("配置已重载");
+                $("#markers-status").textContent = "✓ 已重载";
+                setTimeout(() => $("#markers-status").textContent = "", 3000);
+            } catch (e) {}
+        });
+
+        $("#btn-test-parse").addEventListener("click", async () => {
+            const text = $("#test-input").value.trim();
+            if (!text) return showToast("请输入测试文本", "error");
+
+            try {
+                const data = await api("/api/parse", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text })
+                });
+                const result = $("#test-result");
+                result.hidden = false;
+
+                let html = "<h4>解析结果</h4>";
+                if (data.fields) {
+                    html += '<div class="parse-fields">';
+                    for (const [k, v] of Object.entries(data.fields)) {
+                        html += `<div class="parse-field"><span class="field-name">${k}:</span> ${escapeHtml(v)}</div>`;
+                    }
+                    html += "</div>";
+                }
+                if (data.matched_markers && data.matched_markers.length) {
+                    const markerNames = data.matched_markers.map(m =>
+                        typeof m === "string" ? m : (m.symbol || m.field || JSON.stringify(m))
+                    );
+                    html += `<p class="parse-meta">匹配标记: ${escapeHtml(markerNames.join(", "))}</p>`;
+                }
+                if (data.unmatched_sections && data.unmatched_sections.length) {
+                    html += `<p class="parse-meta warn">未匹配段落: ${data.unmatched_sections.length} 条</p>`;
+                }
+                result.innerHTML = html;
+            } catch (e) {}
+        });
+
+        function escapeHtml(str) {
+            const d = document.createElement("div");
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+    })();
+    </script>
+</body>
+</html>
