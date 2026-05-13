@@ -1,14 +1,14 @@
-# requirements.txt — EduAssist
+# ── 核心依赖（必装）──────────────────────────────────
+flask>=3.0,<4.0
+flask-cors>=4.0,<5.0
+pyyaml>=6.0
+python-docx>=1.1.0
+jinja2>=3.1
+python-dotenv>=1.0
+markdown>=3.5
 
-flask>=3.0
-flask-cors>=4.0
-openai-whisper
-paddlepaddle
-paddleocr
-anthropic              # Claude Vision API（可选）
-pillow-heif            # HEIC 格式支持（可选）
-pyyaml
-python-docx            # DOCX 输出支持
-jinja2                 # 模板渲染
-python-dotenv          # 读取 .env 配置
-markdown               # Markdown 转 HTML 预览
+# ── 可选功能（按需安装）──────────────────────────────
+# 语音转录：pip install openai-whisper
+# 本地 OCR：pip install paddlepaddle paddleocr
+# Claude Vision：pip install anthropic
+# HEIC 图片：pip install pillow-heif

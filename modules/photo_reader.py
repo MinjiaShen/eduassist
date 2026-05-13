@@ -22,6 +22,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# HEIC 格式自动注册
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    logger.warning("pillow-heif 未安装，HEIC 格式不受支持")
+
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------

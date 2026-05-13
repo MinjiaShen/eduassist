@@ -2,9 +2,8 @@
 # 所有模块必须严格遵守此规范，确保模块间一致性
 
 ## 1. 项目根目录
-```
-/root/.openclaw/workspace/eduassist/
-```
+
+项目根目录通过 `Path(__file__).resolve().parent` 动态解析，各模块禁止硬编码绝对路径。
 
 ## 2. 模块接口定义
 
@@ -139,15 +138,16 @@ def save_output(content: str, filename: str, fmt: str = "md") -> str:
 ## 3. 共享约定
 
 ### 3.1 错误处理
-- 所有函数不抛异常，通过返回值中的 `success` 和 `error` 字段报告错误
-- 内部异常必须 try/except 捕获，转换为 error 字符串
+- 模块函数**必须**通过返回值中的 `success`（bool）和 `error`（str | None）字段报告错误，禁止直接抛出异常
+- 内部异常必须 try/except 捕获，转换为 error 字符串，并将 `success` 设为 `False`
+- 调用方（app.py）**必须**检查返回值的 `success` 字段后再访问其他字段；当 `success` 为 `False` 时应读取 `error` 并向用户返回友好提示
 
 ### 3.2 路径约定
 - 上传文件临时目录: `uploads/`
 - 输出目录: `output/`
 - 配置目录: `config/`
 - 模板目录: `templates/`
-- 所有路径基于项目根目录 `/root/.openclaw/workspace/eduassist/`
+- 所有路径基于项目根目录（通过 `Path(__file__).resolve().parent` 动态解析）
 
 ### 3.3 日志
 - 使用 Python 标准 `logging` 模块

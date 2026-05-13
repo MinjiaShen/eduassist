@@ -6,9 +6,12 @@ EduAssist — Flask 主入口
 import os
 import sys
 import uuid
+import time
 import logging
+import threading
 from pathlib import Path
 
+import yaml
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -66,10 +69,66 @@ app = Flask(
     static_folder=str(BASE_DIR / "static"),
 )
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB
-CORS(app)
+CORS(app, origins=["http://localhost:5000", "http://127.0.0.1:5000"])
 
 ALLOWED_AUDIO = {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg"}
 ALLOWED_IMAGE = {".jpg", ".jpeg", ".png", ".heic"}
+
+# ── 任务队列（B-07 + B-11）───────────────────────────────
+tasks = {}  # task_id -> {"status", "result", "created_at", ...}
+tasks_lock = threading.Lock()
+MAX_TASK_AGE = 3600  # 秒
+
+
+def _cleanup_old_tasks():
+    """清理超过 MAX_TASK_AGE 的已完成任务，防止内存泄漏"""
+    now = time.time()
+    with tasks_lock:
+        expired = [
+            tid for tid, t in tasks.items()
+            if t.get("status") in ("done", "error") and now - t["created_at"] > MAX_TASK_AGE
+        ]
+        for tid in expired:
+            del tasks[tid]
+    if expired:
+        logger.info("已清理 %d 个过期任务", len(expired))
+
+
+def _remove_file(path: str | None):
+    """安全删除临时文件"""
+    if path:
+        try:
+            p = Path(path)
+            if p.exists():
+                p.unlink()
+                logger.debug("已清理临时文件: %s", path)
+        except OSError as e:
+            logger.warning("清理临时文件失败 %s: %s", path, e)
+
+
+def _run_transcribe_task(task_id: str, audio_path: str, model_size: str, language: str | None):
+    """后台线程：执行转录任务"""
+    try:
+        result = transcriber.transcribe(
+            audio_path, model_size=model_size, language=language
+        )
+        with tasks_lock:
+            if task_id in tasks:
+                if result.get("success"):
+                    tasks[task_id]["status"] = "done"
+                    tasks[task_id]["result"] = result
+                else:
+                    tasks[task_id]["status"] = "error"
+                    tasks[task_id]["error"] = result.get("error", "转录失败")
+    except Exception as e:
+        logger.exception("后台转录失败 [%s]", task_id)
+        with tasks_lock:
+            if task_id in tasks:
+                tasks[task_id]["status"] = "error"
+                tasks[task_id]["error"] = str(e)
+    finally:
+        _remove_file(audio_path)
+        _cleanup_old_tasks()
 
 
 # ── 工具函数 ──────────────────────────────────────────────
@@ -105,7 +164,24 @@ def index():
     return render_template("index.html")
 
 
-# ── 音频转录 ──────────────────────────────────────────────
+# ── 健康检查（O-05）──────────────────────────────────────
+@app.route("/health")
+def health():
+    modules_status = {
+        "transcriber": transcriber is not None,
+        "photo_reader": photo_reader is not None,
+        "marker_parser": marker_parser is not None,
+        "post_processor": post_processor is not None,
+    }
+    all_ok = all(modules_status.values())
+    return jsonify({
+        "success": True,
+        "status": "healthy" if all_ok else "degraded",
+        "modules": modules_status,
+    }), 200 if all_ok else 200
+
+
+# ── 音频转录（B-07: 异步 + B-02: 临时文件清理 + B-09: success 检查）──
 @app.route("/api/transcribe", methods=["POST"])
 def api_transcribe():
     if transcriber is None:
@@ -118,22 +194,49 @@ def api_transcribe():
     model_size = request.form.get("model_size", "medium")
     language = request.form.get("language") or None  # 空字符串→None
 
+    audio_path = None
     try:
         audio_path = save_upload(audio, ALLOWED_AUDIO)
     except ValueError as e:
         return fail(str(e))
 
-    try:
-        result = transcriber.transcribe(
-            str(audio_path), model_size=model_size, language=language
-        )
-        return ok(result)
-    except Exception as e:
-        logger.exception("转录失败")
-        return fail(f"转录失败: {e}", 500)
+    # 生成 task_id，启动后台线程
+    task_id = uuid.uuid4().hex
+    with tasks_lock:
+        tasks[task_id] = {
+            "status": "pending",
+            "created_at": time.time(),
+            "result": None,
+            "error": None,
+        }
+
+    thread = threading.Thread(
+        target=_run_transcribe_task,
+        args=(task_id, str(audio_path), model_size, language),
+        daemon=True,
+    )
+    thread.start()
+
+    logger.info("转录任务已提交: %s", task_id)
+    return jsonify({"success": True, "task_id": task_id}), 202
 
 
-# ── 照片识别 ──────────────────────────────────────────────
+# ── 任务状态查询（B-07）──────────────────────────────────
+@app.route("/api/task/<task_id>")
+def api_task_status(task_id):
+    with tasks_lock:
+        task = tasks.get(task_id)
+    if not task:
+        return fail("任务不存在", 404)
+    resp = {"task_id": task_id, "status": task["status"]}
+    if task["status"] == "done":
+        resp["result"] = task["result"]
+    elif task["status"] == "error":
+        resp["error"] = task["error"]
+    return jsonify({"success": True, **resp})
+
+
+# ── 照片识别（B-02: 临时文件清理 + B-09: success 检查）──
 @app.route("/api/recognize", methods=["POST"])
 def api_recognize():
     if photo_reader is None:
@@ -145,19 +248,23 @@ def api_recognize():
 
     engine = request.form.get("engine", "paddleocr")
 
+    image_path = None
     try:
         image_path = save_upload(image, ALLOWED_IMAGE)
+        result = photo_reader.recognize(str(image_path), engine=engine)
+        if not result.get("success"):
+            return fail(result.get("error", "识别失败"), 500)
+        return ok(result)
     except ValueError as e:
         return fail(str(e))
-
-    try:
-        result = photo_reader.recognize(str(image_path), engine=engine)
-        return ok(result)
     except Exception as e:
         logger.exception("识别失败")
         return fail(f"识别失败: {e}", 500)
+    finally:
+        _remove_file(str(image_path) if image_path else None)
 
 
+# ── 批量识别（B-10: 单文件跳过 + B-02: 临时文件清理）───
 @app.route("/api/batch_recognize", methods=["POST"])
 def api_batch_recognize():
     if photo_reader is None:
@@ -170,19 +277,26 @@ def api_batch_recognize():
     engine = request.form.get("engine", "paddleocr")
 
     paths = []
+    skipped = []
     for img in images:
         try:
             p = save_upload(img, ALLOWED_IMAGE)
             paths.append(str(p))
         except ValueError as e:
-            return fail(f"文件 {img.filename}: {e}")
+            skipped.append({"filename": img.filename, "reason": str(e)})
+
+    if not paths:
+        return fail("没有可处理的有效图片")
 
     try:
         results = photo_reader.batch_recognize(paths, engine=engine)
-        return ok({"results": results})
+        return ok({"results": results, "skipped": skipped})
     except Exception as e:
         logger.exception("批量识别失败")
         return fail(f"批量识别失败: {e}", 500)
+    finally:
+        for p in paths:
+            _remove_file(p)
 
 
 # ── 标记解析 ──────────────────────────────────────────────
@@ -262,13 +376,37 @@ def api_markers_save():
     if not content:
         return fail("请提供配置内容")
 
+    # B-05: YAML 语法校验
+    try:
+        yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        return fail(f"YAML 语法错误: {e}")
+
     config_path = CONFIG_DIR / "markers.yaml"
+    backup_path = CONFIG_DIR / "markers.yaml.bak"
+
+    # B-05: 写入前备份
+    try:
+        if config_path.exists():
+            backup_path.write_bytes(config_path.read_bytes())
+            logger.info("已备份标记配置到 %s", backup_path)
+    except Exception as e:
+        logger.warning("备份标记配置失败: %s", e)
+
+    # 写入新配置，失败则回滚
     try:
         config_path.write_text(content, encoding="utf-8")
         logger.info("标记配置已保存")
         return ok({"message": "配置已保存"})
     except Exception as e:
         logger.exception("保存配置失败")
+        # 回滚：从备份恢复
+        if backup_path.exists():
+            try:
+                config_path.write_bytes(backup_path.read_bytes())
+                logger.info("已从备份回滚标记配置")
+            except Exception as rb_err:
+                logger.error("回滚失败: %s", rb_err)
         return fail(f"保存失败: {e}", 500)
 
 
@@ -286,12 +424,13 @@ def api_markers_reload():
         return fail(f"重载失败: {e}", 500)
 
 
-# ── 文件下载 ──────────────────────────────────────────────
+# ── 文件下载（B-06: 路径穿越防护）────────────────────────
 @app.route("/api/download/<filename>")
 def api_download(filename):
-    # 安全检查：不允许路径穿越
     safe_name = Path(filename).name
-    file_path = OUTPUT_DIR / safe_name
+    file_path = (OUTPUT_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(OUTPUT_DIR.resolve())):
+        return fail("非法路径", 403)
     if not file_path.exists():
         return fail("文件不存在", 404)
     return send_from_directory(str(OUTPUT_DIR), safe_name, as_attachment=True)
@@ -313,6 +452,9 @@ def server_error(e):
     return fail("服务器内部错误", 500)
 
 
-# ── 启动 ──────────────────────────────────────────────────
+# ── 启动（B-01: 环境变量控制 debug）──────────────────────
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    host = os.getenv("FLASK_HOST", "127.0.0.1")
+    port = int(os.getenv("FLASK_PORT", "5000"))
+    app.run(host=host, port=port, debug=debug_mode)
